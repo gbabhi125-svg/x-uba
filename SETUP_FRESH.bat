@@ -5,7 +5,7 @@ REM ======================================================================
 REM   X-UBA - MCA MAJOR PROJECT - FRESH MACHINE SETUP (Windows)
 REM   Double-click this file from the X-UBA project folder.
 REM   Creates an isolated virtual environment (venv\), installs the
-REM   dependencies into it, runs all 14 analysis modules, and tells you
+REM   dependencies into it, runs all analysis modules, and tells you
 REM   how to open the dashboard. Nothing is installed globally.
 REM ======================================================================
 
@@ -81,7 +81,7 @@ if errorlevel 1 (
 
 echo.
 echo ============================================================
-echo   [OK] SETUP COMPLETE - ALL 14 MODULES RAN SUCCESSFULLY
+echo   [OK] SETUP COMPLETE - ALL MODULES RAN SUCCESSFULLY
 echo ============================================================
 echo.
 echo   Open the dashboard:

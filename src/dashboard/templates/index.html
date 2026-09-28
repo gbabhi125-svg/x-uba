@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>X-UBA | Identity Risk Intelligence</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+<script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/d3.min.js') }}"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-icon">X</div>
+    <div>
+      <div class="brand-text">X-UBA</div>
+      <div class="brand-sub">Identity Risk Intelligence &middot; MCA Major Project</div>
+    </div>
+  </div>
+  <div class="live-pill"><span class="live-dot"></span><span id="live-text">Models loaded</span></div>
+</header>
+
+{% if missing %}
+<div class="banner">
+  <b>Pipeline outputs not found.</b> The dashboard reads the files the analysis pipeline writes.
+  Run <code>python run_pipeline.py</code> from the project folder, then restart the dashboard.<br>
+  Missing: <code>{{ missing|join(', ') }}</code>
+</div>
+{% else %}
+
+<nav class="tabs-wrap">
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-page="overview">Overview</button>
+    <button class="tab" data-page="explorer">Identity Explorer</button>
+    <button class="tab" data-page="graph">Privilege Graph</button>
+    <button class="tab" data-page="performance">Model Performance</button>
+    <button class="tab" data-page="compliance">Compliance &amp; Policy</button>
+    <button class="tab" data-page="org">Organization</button>
+    <button class="tab" data-page="quietrisk">Quiet Risk<span class="tag">NEW</span></button>
+    <button class="tab" data-page="remediation">Remediation Optimizer<span class="tag">NEW</span></button>
+    <button class="tab" data-page="research">Research Results</button>
+    <div class="tab-indicator" id="tab-indicator"></div>
+  </div>
+</nav>
+
+<!-- ═══════════ OVERVIEW ═══════════ -->
+<section class="page active" id="page-overview">
+  <div class="page-head">
+    <h2 class="section-title">Executive Overview</h2>
+    <p class="section-sub">Organisation-wide identity risk posture from 6 heterogeneous telemetry tables
+      (480,000 authentication, privilege-change and resource-access events). Risk levels are
+      5-fold cross-validated, so no identity is scored by a model that saw its own label.</p>
+  </div>
+  <div class="grid grid-6" id="kpi-row"></div>
+  <div class="grid grid-3 mt">
+    <div class="card"><div class="card-title">Predicted risk level <small>cross-validated XGBoost</small></div>
+      <div class="chart-box"><canvas id="chart-risk-dist"></canvas></div></div>
+    <div class="card"><div class="card-title">Predicted threat type</div>
+      <div class="chart-box"><canvas id="chart-threat-dist"></canvas></div></div>
+    <div class="card"><div class="card-title">Behavioural clusters <small>K-Means, no labels used</small></div>
+      <div id="cluster-list"></div></div>
+  </div>
+  <div class="card mt">
+    <div class="card-title">Top 10 simulated attack targets
+      <small>expected attack risk = kill-chain likelihood &times; blast radius &middot; click a row</small></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>#</th><th>Identity</th><th>Name</th><th>Department</th><th>Privilege</th><th class="n">Risk</th>
+        <th>Level</th><th class="n">Blast radius</th><th class="n">Likelihood</th><th class="n">Expected risk</th></tr></thead>
+      <tbody id="top-targets"></tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- ═══════════ IDENTITY EXPLORER ═══════════ -->
+<section class="page" id="page-explorer">
+  <div class="page-head">
+    <h2 class="section-title">Identity Explorer</h2>
+    <p class="section-sub">Search and filter all 10,000 identities. Click any row for the full deep-dive:
+      live SHAP explanation, kill-chain simulation, what-if analysis and one-click remediation.</p>
+  </div>
+  <form class="filters" id="explorer-form">
+    <input type="text" id="f-search" placeholder="Search ID, name or job title..." aria-label="Search">
+    <select id="f-department" aria-label="Department"><option value="">All departments</option></select>
+    <select id="f-risk" aria-label="Risk level"><option value="">All risk levels</option>
+      <option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select>
+    <select id="f-quadrant" aria-label="Quadrant"><option value="">All quadrants</option>
+      <option value="QUIET_RISK">Quiet risk</option><option value="CONSENSUS_RISK">Consensus risk</option>
+      <option value="NOISY_BENIGN">Noisy benign</option><option value="CONSENSUS_BENIGN">Consensus benign</option></select>
+    <select id="f-sort" aria-label="Sort">
+      <option value="attack_rank">Sort: attack rank</option><option value="xgb_risk_index">Sort: risk score</option>
+      <option value="fused_risk_score">Sort: fused score</option><option value="blast_radius_score">Sort: blast radius</option>
+      <option value="disagreement_score">Sort: disagreement</option><option value="compliance_score">Sort: compliance (worst)</option>
+      <option value="identity_id">Sort: identity ID</option></select>
+    <button type="submit">Apply</button>
+  </form>
+  <div class="card">
+    <div class="card-title">Identities <small id="explorer-count"></small></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>ID</th><th>Name</th><th>Department</th><th>Privilege</th><th>MFA</th><th class="n">Risk</th>
+        <th>Level</th><th>Threat</th><th class="n">Fused</th><th class="n">Blast</th><th>Quadrant</th>
+        <th class="n">SoD</th><th class="n">Compliance</th></tr></thead>
+      <tbody id="explorer-tbody"></tbody>
+    </table></div>
+    <div class="pager">
+      <button class="ghost" id="prev-page">&larr; Previous</button>
+      <span id="page-indicator"></span>
+      <button class="ghost" id="next-page">Next &rarr;</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ PRIVILEGE GRAPH ═══════════ -->
+<section class="page" id="page-graph">
+  <div class="page-head">
+    <h2 class="section-title">Privilege Graph Explorer</h2>
+    <p class="section-sub">NetworkX privilege graph (identities, resources, systems). Drag nodes, scroll to zoom.
+      Load any identity to see its blast-radius neighbourhood.</p>
+  </div>
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-title">Organisation access graph <small>department &rarr; system, edge width = access volume</small></div>
+      <div class="graph-canvas" id="graph-overview"></div>
+      <div class="legend"><span><i style="background:#6366f1"></i>Department (shade = avg risk)</span>
+        <span><i style="background:#f43f5e"></i>Critical system</span><span><i style="background:#f59e0b"></i>High</span>
+        <span><i style="background:#3b82f6"></i>Medium</span><span><i style="background:#10d97a"></i>Low</span></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Identity ego-network <small>what an attacker reaches from this account</small></div>
+      <form class="filters" id="graph-form">
+        <input type="text" id="graph-id" placeholder="Identity ID, e.g. U05473" aria-label="Identity ID">
+        <button type="submit">Show network</button>
+      </form>
+      <div class="graph-canvas" id="graph-identity"><div class="loading">Enter an identity ID</div></div>
+      <div class="chips" id="graph-chips"></div>
+      <div class="legend"><span><i style="background:#f43f5e"></i>Identity</span><span><i style="background:#a855f7"></i>System (admin rights)</span>
+        <span><i style="background:#10d97a"></i>System</span><span><i style="background:#f59e0b"></i>Resource (colour = sensitivity)</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ MODEL PERFORMANCE ═══════════ -->
+<section class="page" id="page-performance">
+  <div class="page-head">
+    <h2 class="section-title">Model Performance</h2>
+    <p class="section-sub">Held-out test set (2,000 identities) plus 5-fold cross-validation, feature-group ablation and
+      the class-weighting fix for rare threat types. Weaknesses are shown, not hidden.</p>
+  </div>
+  <div class="grid grid-4" id="model-kpis"></div>
+  <div class="grid grid-2 mt">
+    <div class="card"><div class="card-title">Per-class F1 &mdash; risk level</div>
+      <div class="chart-box"><canvas id="chart-risk-f1"></canvas></div></div>
+    <div class="card"><div class="card-title">Per-class F1 &mdash; threat type <small>baseline vs class-weighted</small></div>
+      <div class="chart-box"><canvas id="chart-threat-f1"></canvas></div></div>
+  </div>
+  <div class="grid grid-3 mt">
+    <div class="card"><div class="card-title">Confusion matrix &mdash; risk level <small>rows = true, columns = predicted</small></div>
+      <div id="confusion"></div></div>
+    <div class="card"><div class="card-title">Feature-group ablation <small>macro-F1 drop when a telemetry source is removed</small></div>
+      <div id="ablation"></div></div>
+    <div class="card"><div class="card-title">Global risk drivers <small>mean |SHAP|, risk-level model</small></div>
+      <div id="shap-global"></div></div>
+  </div>
+</section>
+
+<!-- ═══════════ COMPLIANCE ═══════════ -->
+<section class="page" id="page-compliance">
+  <div class="page-head">
+    <h2 class="section-title">Compliance &amp; Policy</h2>
+    <p class="section-sub">Deterministic, auditable rules: separation-of-duties violations (every flag carries record-level
+      evidence) and control gaps mapped to NIST SP 800-53 and GDPR Art. 32. An assessment aid, not a certification.</p>
+  </div>
+  <div class="grid grid-4" id="comp-kpis"></div>
+  <div class="grid grid-2 mt">
+    <div class="card"><div class="card-title">SoD violations by rule</div><div id="sod-by-rule"></div></div>
+    <div class="card"><div class="card-title">SoD violations by severity</div>
+      <div class="chart-box short"><canvas id="chart-sod-sev"></canvas></div></div>
+  </div>
+  <div class="grid grid-2 mt">
+    <div class="card"><div class="card-title">Control gaps <small>identities failing each control</small></div><div id="ctrl-bars"></div></div>
+    <div class="card"><div class="card-title">Average compliance score by predicted risk level</div>
+      <div class="chart-box short"><canvas id="chart-comp-level"></canvas></div></div>
+  </div>
+  <div class="card mt"><div class="card-title">Worst offenders <small>2+ SoD violations, click for details</small></div>
+    <div class="table-wrap"><table><thead><tr><th>Identity</th><th>Department</th><th>Privilege</th><th class="n">SoD</th>
+      <th>Rules</th><th class="n">Compliance</th><th>Level</th></tr></thead><tbody id="worst"></tbody></table></div></div>
+</section>
+
+<!-- ═══════════ ORGANIZATION ═══════════ -->
+<section class="page" id="page-org">
+  <div class="page-head">
+    <h2 class="section-title">Organizational Analytics</h2>
+    <p class="section-sub">Department versus organisation, and identity versus its own department peers (modified z-score).</p>
+  </div>
+  <div class="card"><div class="card-title">Department comparison <small id="chi2-note"></small></div>
+    <div class="chart-box"><canvas id="chart-dept"></canvas></div></div>
+  <div class="grid grid-2 mt">
+    <div class="card"><div class="card-title">Department profile</div>
+      <div class="table-wrap"><table><thead><tr><th>Department</th><th class="n">Identities</th><th class="n">Avg risk</th>
+        <th class="n">Admin</th><th class="n">MFA</th><th class="n">Compliance</th><th>Flagged</th></tr></thead>
+        <tbody id="dept-table"></tbody></table></div></div>
+    <div class="card"><div class="card-title">Peer outliers <small id="peer-note"></small></div>
+      <div class="table-wrap"><table><thead><tr><th>Identity</th><th>Department</th><th class="n">Max z</th>
+        <th>Unusual features</th><th class="n">Risk</th></tr></thead><tbody id="peer-table"></tbody></table></div></div>
+  </div>
+</section>
+
+<!-- ═══════════ QUIET RISK ═══════════ -->
+<section class="page" id="page-quietrisk">
+  <div class="page-head">
+    <h2 class="section-title">Quiet Risk &mdash; Cross-Layer Disagreement<span class="tag">NOVEL</span></h2>
+    <p class="section-sub">Behavioural layer (what an identity does) versus structural layer (what it could do: blast radius,
+      SoD severity, compliance gaps). <b>Quiet risk</b> = behaviourally unremarkable but structurally in the top 20% &mdash;
+      accounts a behaviour-only UEBA system would rank as safe.</p>
+  </div>
+  <div class="grid grid-4" id="quadrant-kpis"></div>
+  <div class="grid grid-2 mt">
+    <div class="card"><div class="card-title">Behavioural vs structural percentile <small>2,000-identity sample</small></div>
+      <div class="chart-box tall"><canvas id="chart-quadrants"></canvas></div></div>
+    <div class="card"><div class="card-title">Why they are risky <small>policy breaches among quiet-risk identities</small></div>
+      <div id="quiet-rules"></div><div class="note" id="quiet-note"></div></div>
+  </div>
+  <div class="card mt"><div class="card-title">Top quiet-risk identities <small>ranked by disagreement score</small></div>
+    <div class="table-wrap"><table><thead><tr><th>Identity</th><th>Department</th><th>Privilege</th><th>MFA</th>
+      <th>Model level</th><th class="n">Blast</th><th class="n">SoD sev.</th><th>Rules</th><th class="n">Compliance</th>
+      <th class="n">Disagreement</th></tr></thead><tbody id="quiet-table"></tbody></table></div></div>
+</section>
+
+<!-- ═══════════ REMEDIATION ═══════════ -->
+<section class="page" id="page-remediation">
+  <div class="page-head">
+    <h2 class="section-title">Graph-Aware Remediation Optimizer<span class="tag">NOVEL</span></h2>
+    <p class="section-sub">A team can fix 200 identities per cycle. Which 200? <b>Naive</b> ranks by the behavioural model's
+      predicted risk reduction; <b>impact-aware</b> ranks by expected attack risk removed, with blast radius re-computed on the
+      privilege graph after each action; <b>balanced</b> weighs both equally.</p>
+  </div>
+  <div class="grid grid-3" id="strategy-cards"></div>
+  <div class="grid grid-3 mt">
+    <div class="card"><div class="card-title">Model-risk reduction</div><div class="chart-box short"><canvas id="chart-rem-risk"></canvas></div></div>
+    <div class="card"><div class="card-title">Expected attack risk removed</div><div class="chart-box short"><canvas id="chart-rem-ear"></canvas></div></div>
+    <div class="card"><div class="card-title">Critical-resource paths removed</div><div class="chart-box short"><canvas id="chart-rem-crit"></canvas></div></div>
+  </div>
+  <div class="grid grid-3 mt" id="strategy-tables"></div>
+  <div class="card mt"><div class="card-title">Method and full numbers</div><pre class="summary-text" id="rem-summary"></pre></div>
+</section>
+
+<!-- ═══════════ RESEARCH ═══════════ -->
+<section class="page" id="page-research">
+  <div class="page-head">
+    <h2 class="section-title">Research Results</h2>
+    <p class="section-sub">The three literature-grounded research gaps plus the explanation-action check. All numbers are read
+      from the pipeline's report files; negative results are reported as they are.</p>
+  </div>
+  <div class="grid grid-4" id="research-hero"></div>
+  <div class="grid grid-2 mt">
+    <div class="card"><div class="card-title">Gap 1 &mdash; Multi-signal risk fusion <small>held-out test, thresholds tuned on train</small></div>
+      <div class="table-wrap"><table><thead><tr><th>Signal</th><th class="n">Precision</th><th class="n">Recall</th><th class="n">F1</th>
+        <th class="n">ROC-AUC</th></tr></thead><tbody id="fusion-table"></tbody></table></div><div class="note" id="fusion-note"></div></div>
+    <div class="card"><div class="card-title">Gap 2 &mdash; SHAP fidelity curve <small>probability drop when features are removed</small></div>
+      <div class="chart-box"><canvas id="chart-fidelity"></canvas></div></div>
+  </div>
+  <div class="grid grid-2 mt" id="research-texts"></div>
+</section>
+
+<!-- ═══════════ IDENTITY DEEP-DIVE ═══════════ -->
+<div class="modal-overlay" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal">
+    <div class="modal-head">
+      <div><div class="modal-title" id="modal-title">&mdash;</div><div class="modal-sub" id="modal-sub"></div></div>
+      <button class="close-btn" id="modal-close" aria-label="Close">&#10005;</button>
+    </div>
+    <div id="modal-body"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endif %}
+</body>
+</html>

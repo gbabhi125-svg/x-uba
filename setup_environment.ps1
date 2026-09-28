@@ -57,11 +57,11 @@ if ($LASTEXITCODE -ne 0) { Fail "The pipeline stopped with an error - see the me
 
 Write-Host ""
 Write-Host "============================================================"
-Write-Host "  [OK] SETUP COMPLETE - ALL 14 MODULES RAN SUCCESSFULLY" -ForegroundColor Green
+Write-Host "  [OK] SETUP COMPLETE - ALL MODULES RAN SUCCESSFULLY" -ForegroundColor Green
 Write-Host "============================================================"
 Write-Host ""
 Write-Host "  Dashboard:   venv\Scripts\python.exe src\dashboard\app.py"
 Write-Host "               then open http://127.0.0.1:5000"
-Write-Host "  One module:  venv\Scripts\python.exe run_pipeline.py --only 8"
+Write-Host "  One module:  venv\Scripts\python.exe run_pipeline.py --only 9"
 Write-Host "  One report:  venv\Scripts\python.exe src\simulator\attack_simulator.py --identity U00042"
 Write-Host ""

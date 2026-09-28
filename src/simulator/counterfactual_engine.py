@@ -18,7 +18,7 @@ with the Phase 1 risk model, and measures the predicted risk reduction:
 
 An action only applies where it changes something (e.g. MFA cannot be
 "enforced" on an identity that already has it). Derived features are
-recomputed after every change (src/common.py:add_derived_features), so the
+recomputed after every change (src/simulator/interventions.py), so the
 model never sees an inconsistent feature vector.
 
 Risk index = expected value of the 4-class risk_level probabilities
@@ -39,10 +39,12 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import (  # noqa: E402
     MODELS, init, banner, section, write_text, write_json, require, load_features,
-    load_metadata, encode, risk_index, risk_band, add_derived_features
+    load_metadata, risk_band
 )
+from interventions import ACTIONS, score as _score  # noqa: E402
 
 init()
 banner("X-UBA | MCA MAJOR PROJECT | PHASE 6: Counterfactual Risk-Reduction Engine")
@@ -57,57 +59,8 @@ le_risk = joblib.load(f"{MODELS}/le_risk_level.joblib")
 scores = pd.read_csv("reports/identity_risk_scores.csv")
 shap_imp = pd.read_csv("reports/shap_feature_importance.csv")
 
-PRIV_DOWN = {"admin": "power-user", "power-user": "user", "user": "user"}
-
-
-def enforce_mfa(d):
-    applies = d["mfa_enabled"] == 0
-    d.loc[applies, "mfa_enabled"] = 1
-    d.loc[applies, "mfa_usage_rate"] = np.maximum(d.loc[applies, "mfa_usage_rate"], 0.95)
-    return applies
-
-
-def downgrade_privilege(d):
-    applies = d["privilege_level"] != "user"
-    d.loc[applies, "privilege_level"] = d.loc[applies, "privilege_level"].map(PRIV_DOWN)
-    return applies
-
-
-def recertify_stale(d):
-    applies = d["inactive_days"] > 30
-    d.loc[applies, "inactive_days"] = 30
-    return applies
-
-
-def reduce_footprint(d):
-    applies = d["n_systems"] > 3
-    ratio = (3 / d.loc[applies, "n_systems"]).clip(upper=1)
-    d.loc[applies, "n_systems"] = 3
-    d.loc[applies, "system_count"] = np.minimum(d.loc[applies, "system_count"], 3)
-    for c in ("resource_count", "access_count", "sensitive_resource_access"):
-        d.loc[applies, c] = (d.loc[applies, c] * ratio).round()
-    return applies
-
-
-def revoke_unapproved(d):
-    applies = d["unapproved_changes"] > 0
-    d.loc[applies, "unapproved_changes"] = 0
-    return applies
-
-
-ACTIONS = {
-    "ENFORCE_MFA": (enforce_mfa, ["mfa_enabled", "mfa_usage_rate"]),
-    "DOWNGRADE_PRIVILEGE": (downgrade_privilege, ["privilege_level_enc"]),
-    "RECERTIFY_STALE_ACCESS": (recertify_stale, ["inactive_days"]),
-    "REDUCE_SYSTEM_FOOTPRINT": (reduce_footprint, ["n_systems", "system_count", "resource_count",
-                                                   "access_count", "sensitive_resource_access"]),
-    "REVOKE_UNAPPROVED": (revoke_unapproved, ["unapproved_changes"]),
-}
-
-
 def score(d):
-    d = add_derived_features(d.copy())
-    return risk_index(model.predict_proba(encode(d, metadata)), le_risk.classes_)
+    return _score(d, model, le_risk.classes_, metadata)
 
 
 # ── Targets: identities currently predicted HIGH / CRITICAL (out-of-fold) ──
@@ -122,7 +75,7 @@ out = pd.DataFrame({"identity_id": base["identity_id"], "baseline_risk": baselin
 combined = base.copy()
 combined_applies = np.zeros(len(base), dtype=bool)
 action_stats = []
-for name, (fn, _) in ACTIONS.items():
+for name, (fn, _, _) in ACTIONS.items():
     d = base.copy()
     applies = fn(d).values
     after = score(d)

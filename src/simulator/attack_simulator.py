@@ -14,20 +14,10 @@ Joins every earlier phase into ONE report per identity:
     IMPACT  how far could it spread? Phase 5 blast radius + attack path
     ACTION  what should we do?      Phase 6 best counterfactual action
 
-Kill-chain simulation. For a compromised-identity scenario each stage gets a
-probability derived only from the identity's observable posture:
-
-  1. INITIAL ACCESS        0.05 base  +0.25 no MFA  +0.5 x failed-login rate
-                           +0.10 logins from >2 countries  +0.10 dormant (>90 d)
-                           +0.15 expired contractor still present
-  2. PRIVILEGE ESCALATION  admin 0.90 / power-user 0.50 / user 0.20
-                           +0.10 if it has unapproved privilege changes
-  3. LATERAL MOVEMENT      reachable systems / total systems
-  4. DATA IMPACT           0.85 if a CRITICAL resource is reachable,
-                           0.50 if only HIGH, else 0.15
-
-End-to-end likelihood = product of the 4 stages (each clipped to 0.01-0.95).
-Expected attack risk = likelihood x blast radius (0-100 scale).
+Kill-chain simulation: four stage probabilities (initial access, privilege
+escalation, lateral movement, data impact) derived only from observable
+posture and graph reach - rules documented in src/simulator/killchain.py.
+Expected attack risk = end-to-end likelihood x blast radius (0-100 scale).
 
 Run from ANYWHERE - this script anchors itself to the project root.
     python src/simulator/attack_simulator.py                   (all identities)
@@ -44,14 +34,15 @@ import os
 import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import (  # noqa: E402
     RAW, init, banner, section, write_text, write_json, require, load_features
 )
+from killchain import kill_chain  # noqa: E402
 
 MIN_USEFUL_REDUCTION = 1.0   # risk-index points; smaller changes are not recommended
 
@@ -104,20 +95,9 @@ def build_table():
     t["best_action"] = t["best_action"].fillna("MONITOR (not predicted HIGH/CRITICAL)")
     t["attack_path"] = t["attack_path"].fillna("")
 
-    # ── Kill-chain stage probabilities ──
-    p1 = (0.05 + 0.25 * (t["mfa_enabled"] == 0) + 0.5 * t["failed_login_rate"]
-          + 0.10 * (t["unique_countries"] > 2) + 0.10 * (t["inactive_days"] > 90)
-          + 0.15 * t["is_contractor_expired"])
-    p2 = (t["privilege_level"].map({"admin": 0.90, "power-user": 0.50, "user": 0.20})
-          + 0.10 * (t["unapproved_changes"] > 0))
-    p3 = t["reachable_systems"] / n_systems_total
-    p4 = np.select([t["reachable_critical"] > 0, t["reachable_high"] > 0], [0.85, 0.50], 0.15)
-    for name, p in (("p_initial_access", p1), ("p_privilege_escalation", p2),
-                    ("p_lateral_movement", p3), ("p_data_impact", p4)):
-        t[name] = np.clip(p, 0.01, 0.95).round(4)
-    t["attack_likelihood"] = (t["p_initial_access"] * t["p_privilege_escalation"] *
-                              t["p_lateral_movement"] * t["p_data_impact"]).round(5)
-    t["expected_attack_risk"] = (t["attack_likelihood"] * t["blast_radius_score"]).round(3)
+    # ── Kill-chain stage probabilities (rules in src/simulator/killchain.py) ──
+    kc = kill_chain(t, n_systems_total)
+    t[kc.columns] = kc
     t["attack_rank"] = t["expected_attack_risk"].rank(ascending=False, method="first").astype(int)
     return t.sort_values("attack_rank")
 

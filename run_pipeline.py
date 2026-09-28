@@ -2,7 +2,7 @@
 """
 X-UBA - MCA Major Project: run the complete pipeline with one command.
 
-    python run_pipeline.py                 run all 14 modules in dependency order
+    python run_pipeline.py                 run all modules in dependency order
     python run_pipeline.py --from 5        resume from step 5 (earlier outputs must exist)
     python run_pipeline.py --only 7        run a single step
     python run_pipeline.py --list          show the steps
@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parent
 STEPS = [
     ("Phase 0  Dataset generation", "src/data_generation/generate_dataset.py"),
     ("Phase 1  XGBoost + SHAP", "src/modeling/train_models.py"),
+    ("Phase 1b Model validation (CV, ablation)", "src/modeling/model_validation.py"),
     ("Phase 2  Isolation Forest", "src/anomaly_detection/train_isolation_forest.py"),
     ("Phase 3  K-Means clustering", "src/clustering/train_kmeans_clustering.py"),
     ("Phase 4  Temporal risk trajectory", "src/temporal_analysis/temporal_risk_trajectory.py"),
@@ -34,12 +35,14 @@ STEPS = [
     ("Gap 1    Multi-signal risk fusion", "src/risk_fusion/risk_fusion_engine.py"),
     ("Gap 2    SHAP explanation fidelity", "src/explainability/explanation_fidelity.py"),
     ("Gap 3    Graph-structural anomalies", "src/graph_analysis/graph_structural_anomaly.py"),
+    ("Ext 1    Quiet risk (cross-layer)", "src/risk_fusion/quiet_risk.py"),
+    ("Ext 2    Remediation optimizer", "src/simulator/remediation_optimizer.py"),
 ]
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("--from", dest="start", type=int, default=1, help="first step number (1-14)")
+    ap.add_argument("--from", dest="start", type=int, default=1, help="first step number")
     ap.add_argument("--only", type=int, help="run only this step number")
     ap.add_argument("--list", action="store_true", help="list the steps and exit")
     ap.add_argument("--quiet", action="store_true", help="hide module output (show only status)")
