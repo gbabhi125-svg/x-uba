@@ -19,59 +19,46 @@ Requires: data/processed/train_features.csv, test_features.csv,
           models/feature_metadata.joblib (from Phase 1)
 Output: models/isolation_forest.joblib
         reports/isolation_forest_scores.csv
+        reports/isolation_forest_all_scores.csv  (all 10,000 identities)
         reports/phase2_anomaly_detection_summary.txt
 """
 
-import pandas as pd
+import os
+import sys
+from pathlib import Path
+
+import joblib
 import numpy as np
 from sklearn.ensemble import IsolationForest
 from sklearn.metrics import (
     precision_score, recall_score, f1_score, accuracy_score, confusion_matrix
 )
-import joblib
-import json
-import os
-from pathlib import Path
+import pandas as pd
 
-# -- Anchor to project root regardless of where this script is invoked from --
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-os.chdir(PROJECT_ROOT)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from common import (  # noqa: E402
+    SEED, init, banner, section, write_text, write_json, read_json, load_features,
+    load_metadata, encode
+)
 
-os.makedirs("models", exist_ok=True)
-os.makedirs("reports", exist_ok=True)
+# Anchor to project root regardless of where this script is invoked from
+init()
 
-print("=" * 70)
-print("PHASE 2: Isolation Forest - Unsupervised Anomaly Detection")
-print("=" * 70)
+banner("X-UBA | MCA MAJOR PROJECT | PHASE 2: Isolation Forest (unsupervised)")
 
 # =============================================================================
 # LOAD DATA + REUSE PHASE 1's FEATURE ENCODING (apples-to-apples comparison)
 # =============================================================================
 
-train_df = pd.read_csv("data/processed/train_features.csv")
-test_df = pd.read_csv("data/processed/test_features.csv")
+full_df, train_df, test_df = load_features()
 
-metadata_path = "models/feature_metadata.joblib"
-if not os.path.exists(metadata_path):
-    raise FileNotFoundError(
-        "models/feature_metadata.joblib not found. Run Phase 1 "
-        "(src/modeling/train_models.py) first - Phase 2 reuses its "
-        "feature encoding so both models are compared on identical inputs."
-    )
-
-metadata = joblib.load(metadata_path)
+# Phase 2 reuses Phase 1's feature encoding so both models see identical inputs
+metadata = load_metadata()
 feature_cols = metadata["feature_cols"]
-encoders = metadata["categorical_encoders"]
 
-CATEGORICAL_COLS = list(encoders.keys())
-
-for col in CATEGORICAL_COLS:
-    le = encoders[col]
-    train_df[col + "_enc"] = le.transform(train_df[col].astype(str))
-    test_df[col + "_enc"] = le.transform(test_df[col].astype(str))
-
-X_train = train_df[feature_cols].astype(float)
-X_test = test_df[feature_cols].astype(float)
+X_train = encode(train_df, metadata)
+X_test = encode(test_df, metadata)
+X_full = encode(full_df, metadata)
 
 y_test_true = test_df["is_anomaly"].values
 
@@ -90,7 +77,7 @@ iso_forest = IsolationForest(
     n_estimators=300,
     contamination=train_anomaly_rate,
     max_samples="auto",
-    random_state=42,
+    random_state=SEED,
     n_jobs=-1
 )
 iso_forest.fit(X_train)
@@ -98,11 +85,17 @@ iso_forest.fit(X_train)
 raw_pred = iso_forest.predict(X_test)
 y_pred_anomaly = (raw_pred == -1).astype(int)
 
-anomaly_score_raw = iso_forest.score_samples(X_test)
-anomaly_score = -anomaly_score_raw
-anomaly_score_normalized = (
-    (anomaly_score - anomaly_score.min()) / (anomaly_score.max() - anomaly_score.min()) * 100
-).round(2)
+# Higher = more anomalous. Normalised to 0-100 using the TRAINING score range
+# (clipped), so the same identity always gets the same score whichever set it is in.
+train_raw = -iso_forest.score_samples(X_train)
+lo, hi = train_raw.min(), train_raw.max()
+
+
+def normalise(raw):
+    return (np.clip((raw - lo) / (hi - lo), 0, 1) * 100).round(2)
+
+
+anomaly_score_normalized = normalise(-iso_forest.score_samples(X_test))
 
 joblib.dump(iso_forest, "models/isolation_forest.joblib")
 
@@ -118,9 +111,7 @@ metrics_if = {
     "confusion_matrix": confusion_matrix(y_test_true, y_pred_anomaly).tolist()
 }
 
-print("\n" + "-" * 70)
-print("ISOLATION FOREST RESULTS (unsupervised)")
-print("-" * 70)
+section("ISOLATION FOREST RESULTS (unsupervised)")
 print(f"Accuracy:  {metrics_if['accuracy']}")
 print(f"Precision: {metrics_if['precision']}")
 print(f"Recall:    {metrics_if['recall']}")
@@ -135,18 +126,17 @@ comparison = {"isolation_forest": metrics_if}
 
 phase1_metrics_path = "reports/model_metrics.json"
 if os.path.exists(phase1_metrics_path):
-    with open(phase1_metrics_path) as f:
-        phase1 = json.load(f)
+    phase1 = read_json(phase1_metrics_path)
     xgb_metrics = phase1.get("is_anomaly", {})
+    # Anomaly-class metrics, so both columns measure the same thing
+    xgb_anom_cls = xgb_metrics.get("classification_report", {}).get("ANOMALY", {})
     comparison["xgboost_supervised"] = {
         "accuracy": xgb_metrics.get("accuracy"),
-        "precision": xgb_metrics.get("precision_macro"),
-        "recall": xgb_metrics.get("recall_macro"),
-        "f1": xgb_metrics.get("f1_macro"),
+        "precision": round(float(xgb_anom_cls.get("precision", float("nan"))), 4),
+        "recall": round(float(xgb_anom_cls.get("recall", float("nan"))), 4),
+        "f1": round(float(xgb_anom_cls.get("f1-score", float("nan"))), 4),
     }
-    print("\n" + "-" * 70)
-    print("COMPARISON: Unsupervised (Isolation Forest) vs Supervised (XGBoost)")
-    print("-" * 70)
+    section("COMPARISON: Unsupervised (Isolation Forest) vs Supervised (XGBoost)")
     print(f"{'Metric':<12} {'Isolation Forest':<20} {'XGBoost (supervised)':<20}")
     for m in ["accuracy", "precision", "recall", "f1"]:
         print(f"{m:<12} {metrics_if[m]:<20} {comparison['xgboost_supervised'].get(m, 'N/A'):<20}")
@@ -165,12 +155,20 @@ scores_df = pd.DataFrame({
 })
 scores_df.to_csv("reports/isolation_forest_scores.csv", index=False)
 
+# All 10,000 identities (label-free, so scoring training rows is legitimate)
+all_scores_df = pd.DataFrame({
+    "identity_id": full_df["identity_id"].values,
+    "isolation_forest_anomaly_score": normalise(-iso_forest.score_samples(X_full)),
+    "isolation_forest_flagged": (iso_forest.predict(X_full) == -1).astype(int),
+})
+all_scores_df.to_csv("reports/isolation_forest_all_scores.csv", index=False)
+
 # =============================================================================
 # WRITE HUMAN-READABLE SUMMARY
 # =============================================================================
 
 lines = [
-    "X-UBA - PHASE 2: ISOLATION FOREST ANOMALY DETECTION",
+    "X-UBA - MCA MAJOR PROJECT - PHASE 2: ISOLATION FOREST ANOMALY DETECTION",
     "=" * 60,
     "",
     f"Training anomaly rate (contamination parameter used): {train_anomaly_rate:.4f}",
@@ -193,6 +191,11 @@ if "xgboost_supervised" in comparison:
         lines.append(f"{m:<12} {metrics_if[m]:<20} {comparison['xgboost_supervised'].get(m, 'N/A'):<20}")
     lines.append("")
     lines.append(
+        "NOTE: precision/recall/F1 in both columns are for the ANOMALY class "
+        "(is_anomaly = 1), so the comparison is like-for-like."
+    )
+    lines.append("")
+    lines.append(
         "INTERPRETATION: Isolation Forest sees only feature patterns, never the "
         "is_anomaly label. Its lower scores versus XGBoost quantify the value of "
         "supervised learning when labeled incident data exists, while still "
@@ -201,15 +204,11 @@ if "xgboost_supervised" in comparison:
     )
 
 summary_text = "\n".join(lines)
-with open("reports/phase2_anomaly_detection_summary.txt", "w") as f:
-    f.write(summary_text)
+write_text("reports/phase2_anomaly_detection_summary.txt", summary_text)
+write_json("reports/phase2_metrics.json", comparison)
 
-with open("reports/phase2_metrics.json", "w") as f:
-    json.dump(comparison, f, indent=2, default=str)
-
-print("\n" + "=" * 70)
-print("[OK] PHASE 2 COMPLETE")
-print("=" * 70)
+print()
+banner("[OK] PHASE 2 COMPLETE")
 print("\nModel saved to:  models/isolation_forest.joblib")
 print("Scores saved to: reports/isolation_forest_scores.csv")
 print("Summary saved to: reports/phase2_anomaly_detection_summary.txt")

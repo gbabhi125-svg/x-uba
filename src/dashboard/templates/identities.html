@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Identities{% endblock %}
+{% block body %}
+<h1>Identities</h1>
+<p class="sub">{{ total|num(0) }} matching identities. Click an identity for its full explainable report.</p>
+<form class="filters" method="get" action="/identities">
+  <input name="q" value="{{ q }}" placeholder="Identity ID or job title" aria-label="Search">
+  <select name="level" aria-label="Risk level">
+    <option value="">All levels</option>
+    {% for l in levels %}<option {{ 'selected' if l == level }}>{{ l }}</option>{% endfor %}
+  </select>
+  <select name="dept" aria-label="Department">
+    <option value="">All departments</option>
+    {% for d in depts %}<option {{ 'selected' if d == dept }}>{{ d }}</option>{% endfor %}
+  </select>
+  <select name="sort" aria-label="Sort">
+    {% for v, lab in [('attack_rank','Attack rank'),('risk','Risk score'),('blast','Blast radius'),('compliance','Compliance (worst first)'),('id','Identity ID')] %}
+    <option value="{{ v }}" {{ 'selected' if v == sort }}>Sort: {{ lab }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Apply</button>
+</form>
+<div class="card table-wrap"><table>
+  <tr><th>Identity</th><th>Department / role</th><th>Privilege</th><th>MFA</th><th class="n">Risk</th><th>Level</th>
+      <th>Cluster</th><th class="n">Blast</th><th class="n">SOD</th><th class="n">Compliance</th><th class="n">Attack rank</th></tr>
+  {% for r in rows %}
+  <tr><td><a href="/identity/{{ r.identity_id }}">{{ r.identity_id }}</a></td>
+      <td>{{ r.department }} / {{ r.job_title }}</td><td>{{ r.privilege_level }}</td>
+      <td>{{ 'yes' if r.mfa_enabled else 'NO' }}</td><td class="n">{{ r.xgb_risk_index|num(1) }}</td>
+      <td><span class="badge {{ r.xgb_risk_level_pred|band }}">{{ r.xgb_risk_level_pred }}</span></td>
+      <td>{{ r.cluster_name }}</td><td class="n">{{ r.blast_radius_score|num(1) }}</td>
+      <td class="n">{{ r.sod_violation_count|int }}</td><td class="n">{{ r.compliance_score|num(0) }}</td>
+      <td class="n">{{ r.attack_rank }}</td></tr>
+  {% else %}
+  <tr><td colspan="11">No identities match these filters.</td></tr>
+  {% endfor %}
+</table></div>
+<div class="pager">
+  Page {{ page }} of {{ pages }}
+  {% set base = '/identities?q=' ~ (q|urlencode) ~ '&level=' ~ level ~ '&dept=' ~ (dept|urlencode) ~ '&sort=' ~ sort %}
+  {% if page > 1 %}<a href="{{ base }}&page={{ page - 1 }}">&larr; Previous</a>{% endif %}
+  {% if page < pages %}<a href="{{ base }}&page={{ page + 1 }}">Next &rarr;</a>{% endif %}
+</div>
+{% endblock %}

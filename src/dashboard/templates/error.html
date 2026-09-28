@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Setup needed' if missing else 'Not found' }}{% endblock %}
+{% block body %}
+<div class="card">
+{% if missing %}
+  <h1>Pipeline outputs not found</h1>
+  <p>The dashboard reads the files the analysis pipeline writes to <code>reports/</code>. Missing:</p>
+  <ul>{% for f in missing %}<li><code>{{ f }}</code></li>{% endfor %}</ul>
+  <p>Run this from the project folder, then restart the dashboard:</p>
+  <pre>python run_pipeline.py</pre>
+{% else %}
+  <h1>Not found</h1>
+  <p>That page or identity does not exist. Identity IDs run from U00000 to U09999.</p>
+  <p><a href="/identities">Browse identities</a></p>
+{% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+{% block body %}
+<h1>Identity risk overview</h1>
+<p class="sub">Explainable User and Entity Behavior Analytics over heterogeneous IAM telemetry:
+{{ kpis.identities|num(0) }} identities, 6 raw telemetry tables, 14 analysis modules.</p>
+
+<div class="grid kpis">
+  <div class="card kpi"><div class="l">Identities</div><div class="v">{{ kpis.identities|num(0) }}</div></div>
+  <div class="card kpi"><div class="l">Predicted critical</div><div class="v" style="color:var(--crit)">{{ kpis.critical|num(0) }}</div></div>
+  <div class="card kpi"><div class="l">Predicted high</div><div class="v" style="color:var(--high)">{{ kpis.high|num(0) }}</div></div>
+  <div class="card kpi"><div class="l">Early warnings</div><div class="v">{{ kpis.early_warnings|num(0) }}</div></div>
+  <div class="card kpi"><div class="l">SOD violators</div><div class="v">{{ kpis.sod_flagged|num(0) }}</div></div>
+  <div class="card kpi"><div class="l">Avg compliance</div><div class="v">{{ kpis.avg_compliance|num(1) }}</div></div>
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>Predicted risk level (out-of-fold XGBoost)</h2>
+    {% set total = kpis.identities %}
+    <div class="stack">
+      <div style="width:{{ levels.LOW / total * 100 }}%;background:var(--low)" title="LOW"></div>
+      <div style="width:{{ levels.MEDIUM / total * 100 }}%;background:var(--med)" title="MEDIUM"></div>
+      <div style="width:{{ levels.HIGH / total * 100 }}%;background:var(--high)" title="HIGH"></div>
+      <div style="width:{{ levels.CRITICAL / total * 100 }}%;background:var(--crit)" title="CRITICAL"></div>
+    </div>
+    <div class="legend">
+      {% for lvl, color in [('LOW','--low'),('MEDIUM','--med'),('HIGH','--high'),('CRITICAL','--crit')] %}
+      <span><i class="dot" style="background:var({{ color }})"></i>{{ lvl }} {{ levels[lvl]|num(0) }}</span>
+      {% endfor %}
+    </div>
+    <h2 style="margin-top:18px">Model performance (held-out test set, 2,000 identities)</h2>
+    <div class="table-wrap"><table>
+      <tr><th>Model</th><th class="n">Accuracy</th><th class="n">Precision</th><th class="n">Recall</th><th class="n">F1 (macro)</th></tr>
+      {% for r in models %}
+      <tr><td>{{ r.name }}</td><td class="n">{{ r.accuracy|pct }}</td><td class="n">{{ r.precision|pct }}</td>
+          <td class="n">{{ r.recall|pct }}</td><td class="n">{{ r.f1|pct }}</td></tr>
+      {% endfor %}
+      <tr><td>Isolation Forest (unsupervised, anomaly class)</td><td class="n">{{ m.p2.isolation_forest.accuracy|pct }}</td>
+          <td class="n">{{ m.p2.isolation_forest.precision|pct }}</td><td class="n">{{ m.p2.isolation_forest.recall|pct }}</td>
+          <td class="n">{{ m.p2.isolation_forest.f1|pct }}</td></tr>
+    </table></div>
+  </div>
+
+  <div class="card">
+    <h2>Top 10 global risk drivers (mean |SHAP|, risk-level model)</h2>
+    {% set mx = shap[0].mean_abs_shap if shap else 1 %}
+    {% for s in shap %}
+    <div class="hbar"><div class="lab" title="{{ s.feature }}">{{ s.feature }}</div>
+      <div class="track"><div class="fill" style="width:{{ s.mean_abs_shap / mx * 100 }}%"></div></div>
+      <div class="val">{{ s.mean_abs_shap|num(3) }}</div></div>
+    {% endfor %}
+    <p class="note">SHAP values explain the model; in this synthetic dataset activity volume (login
+    and access counts) is a strong driver because the generator allocates more events to riskier identities.</p>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h2>Top 15 simulated attack targets (expected attack risk = kill-chain likelihood x blast radius)</h2>
+  <div class="table-wrap"><table>
+    <tr><th>#</th><th>Identity</th><th>Department / role</th><th>Privilege</th><th>MFA</th><th class="n">Risk</th>
+        <th>Level</th><th class="n">Blast radius</th><th class="n">Likelihood</th><th>Recommended action</th></tr>
+    {% for r in top %}
+    <tr><td>{{ r.attack_rank }}</td><td><a href="/identity/{{ r.identity_id }}">{{ r.identity_id }}</a></td>
+        <td>{{ r.department }} / {{ r.job_title }}</td><td>{{ r.privilege_level }}</td>
+        <td>{{ 'yes' if r.mfa_enabled else 'NO' }}</td><td class="n">{{ r.xgb_risk_index|num(1) }}</td>
+        <td><span class="badge {{ r.xgb_risk_level_pred|band }}">{{ r.xgb_risk_level_pred }}</span></td>
+        <td class="n">{{ r.blast_radius_score|num(1) }}</td><td class="n">{{ r.attack_likelihood|num(3) }}</td>
+        <td>{% if r.best_action_reduction is not none and r.best_action_reduction >= 1 %}{{ r.best_action }} (-{{ r.best_action_reduction|num(1) }}){% elif r.best_action.startswith('MONITOR') %}{{ r.best_action }}{% else %}Manual access review{% endif %}</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+
+<div class="grid g2" style="margin-top:16px">
+  <div class="card">
+    <h2>Behavioural clusters (K-Means, no labels used)</h2>
+    <div class="table-wrap"><table>
+      <tr><th>Cluster</th><th class="n">Identities</th><th class="n">Admin</th><th class="n">MFA</th><th class="n">True anomalies</th></tr>
+      {% for c in clusters %}
+      <tr><td>{{ c.cluster_name }}</td><td class="n">{{ c.n_identities|num(0) }}</td><td class="n">{{ c.pct_admin|num(1) }}%</td>
+          <td class="n">{{ c.pct_mfa_enabled|num(1) }}%</td><td class="n">{{ c.pct_true_anomaly|num(1) }}%</td></tr>
+      {% endfor %}
+    </table></div>
+  </div>
+  <div class="card">
+    <h2>Departments</h2>
+    <div class="table-wrap"><table>
+      <tr><th>Department</th><th class="n">Identities</th><th class="n">Avg risk</th><th class="n">Admin</th><th class="n">Compliance</th></tr>
+      {% for d in departments %}
+      <tr><td><a href="/identities?dept={{ d.department }}">{{ d.department }}</a></td><td class="n">{{ d.identities|num(0) }}</td>
+          <td class="n">{{ d.avg_model_risk|num(1) }}</td><td class="n">{{ d.pct_admin|pct }}</td>
+          <td class="n">{{ d.avg_compliance|num(1) }}</td></tr>
+      {% endfor %}
+    </table></div>
+    <p class="note">Chi-square test, department vs anomaly: p = {{ m.p8c.chi2_p_value }} (no department is a spurious risk signal).</p>
+  </div>
+</div>
+{% endblock %}

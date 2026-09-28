@@ -17,19 +17,22 @@ both work identically.
 Output: data/raw/*.csv , data/processed/*.csv
 """
 
-import pandas as pd
-import numpy as np
+import sys
 import random
-import os
 from pathlib import Path
 from datetime import datetime, timedelta
 
-# ── Anchor to project root regardless of where this script is invoked from ──
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-os.chdir(PROJECT_ROOT)
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from common import SEED, init, banner, write_text, add_derived_features  # noqa: E402
 
-np.random.seed(42)
-random.seed(42)
+# Anchor to project root regardless of where this script is invoked from
+init()
+
+np.random.seed(SEED)
+random.seed(SEED)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # CONFIG
@@ -93,12 +96,7 @@ RESOURCE_TYPE_BY_SYSTEM_TYPE = {
     "network": ["Tunnel", "Certificate"],
 }
 
-os.makedirs("data/raw", exist_ok=True)
-os.makedirs("data/processed", exist_ok=True)
-
-print("=" * 70)
-print("MCA CAPSTONE DATASET GENERATOR — Target: 10,000+ identities")
-print("=" * 70)
+banner("X-UBA | MCA MAJOR PROJECT | PHASE 0: DATASET GENERATOR (10,000 identities)")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. SYSTEMS
@@ -106,7 +104,7 @@ print("=" * 70)
 
 systems_df = pd.DataFrame(SYSTEM_DEFS, columns=["system_id", "system_name", "system_type", "sensitivity"])
 systems_df.to_csv("data/raw/systems.csv", index=False)
-print(f"✅ systems.csv           -> {len(systems_df)} rows")
+print(f"[OK] systems.csv           -> {len(systems_df)} rows")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 2. RESOURCES
@@ -133,7 +131,7 @@ for _, srow in systems_df.iterrows():
 
 resources_df = pd.DataFrame(resources)
 resources_df.to_csv("data/raw/resources.csv", index=False)
-print(f"✅ resources.csv         -> {len(resources_df)} rows")
+print(f"[OK] resources.csv         -> {len(resources_df)} rows")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 3. IDENTITIES (core risk ground-truth lives here)
@@ -233,7 +231,7 @@ for i in range(N_IDENTITIES):
 
 identities_df = pd.DataFrame(identities)
 identities_df.to_csv("data/raw/identities.csv", index=False)
-print(f"✅ identities.csv        -> {len(identities_df)} rows")
+print(f"[OK] identities.csv        -> {len(identities_df)} rows")
 print(f"   Risk distribution: {identities_df['risk_level'].value_counts().to_dict()}")
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -295,7 +293,7 @@ login_df = pd.DataFrame(login_rows, columns=[
     "status", "mfa_used", "time_class", "is_anomaly", "anomaly_type"
 ])
 login_df.to_csv("data/raw/login_events.csv", index=False)
-print(f"✅ login_events.csv      -> {len(login_df)} rows")
+print(f"[OK] login_events.csv      -> {len(login_df)} rows")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 5. PRIVILEGE CHANGES
@@ -340,7 +338,7 @@ priv_df = pd.DataFrame(priv_rows, columns=[
     "system_name", "approved_by", "approval_status", "is_anomaly", "anomaly_type"
 ])
 priv_df.to_csv("data/raw/privilege_changes.csv", index=False)
-print(f"✅ privilege_changes.csv -> {len(priv_df)} rows")
+print(f"[OK] privilege_changes.csv -> {len(priv_df)} rows")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 6. RESOURCE ACCESS
@@ -390,36 +388,48 @@ access_df = pd.DataFrame(access_rows, columns=[
     "sensitivity", "action", "data_volume", "status", "is_anomaly", "anomaly_type"
 ])
 access_df.to_csv("data/raw/resource_access.csv", index=False)
-print(f"✅ resource_access.csv   -> {len(access_df)} rows")
+print(f"[OK] resource_access.csv   -> {len(access_df)} rows")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 7. FEATURE ENGINEERING -> identity_features.csv
 # ═══════════════════════════════════════════════════════════════════════════
 
-print("\n🔧 Building identity_features (aggregating raw tables)...")
+print("\n[..] Building identity_features (aggregating raw tables)...")
 
-login_agg = login_df.groupby("identity_id").agg(
+# Vectorised aggregation: boolean helper columns + built-in groupby reducers.
+# (The earlier per-group Python lambdas were extremely slow on pandas 3 /
+# Windows; this produces identical values in a fraction of a second.)
+login_agg = login_df.assign(
+    _failed=(login_df["status"] == "failed").astype(float),
+    _night=(login_df["time_class"] == "night").astype(float),
+).groupby("identity_id").agg(
     login_count=("event_id", "count"),
-    failed_login_rate=("status", lambda s: (s == "failed").mean()),
-    night_login_rate=("time_class", lambda s: (s == "night").mean()),
+    failed_login_rate=("_failed", "mean"),
+    night_login_rate=("_night", "mean"),
     unique_countries=("country", "nunique"),
     unique_devices=("device_id", "nunique"),
     mfa_usage_rate=("mfa_used", "mean")
 ).reset_index()
 
-priv_agg = priv_df.groupby("identity_id").agg(
+priv_agg = priv_df.assign(
+    _grant=(priv_df["change_type"] == "grant").astype(int),
+    _unapproved=(priv_df["approval_status"] == "unapproved").astype(int),
+).groupby("identity_id").agg(
     privilege_changes_count=("change_id", "count"),
-    privilege_escalations=("change_type", lambda s: (s == "grant").sum()),
-    unapproved_changes=("approval_status", lambda s: (s == "unapproved").sum())
+    privilege_escalations=("_grant", "sum"),
+    unapproved_changes=("_unapproved", "sum")
 ).reset_index()
 
-access_agg = access_df.groupby("identity_id").agg(
+access_agg = access_df.assign(
+    _sensitive=access_df["sensitivity"].isin(["high", "critical"]).astype(int),
+    _admin=access_df["action"].isin(["export", "sql_query", "api_call"]).astype(int),
+).groupby("identity_id").agg(
     access_count=("access_id", "count"),
     resource_count=("resource_id", "nunique"),
     system_count=("system_name", "nunique"),
-    sensitive_resource_access=("sensitivity", lambda s: s.isin(["high", "critical"]).sum()),
+    sensitive_resource_access=("_sensitive", "sum"),
     data_download_volume=("data_volume", "sum"),
-    admin_actions=("action", lambda s: s.isin(["export", "sql_query", "api_call"]).sum())
+    admin_actions=("_admin", "sum")
 ).reset_index()
 
 features = identities_df[[
@@ -433,31 +443,16 @@ features = features.merge(priv_agg, on="identity_id", how="left")
 features = features.merge(access_agg, on="identity_id", how="left")
 features = features.fillna(0)
 
-# Derived signals
-features["behaviour_deviation_score"] = (
-    features["failed_login_rate"] * 0.3 +
-    features["night_login_rate"] * 0.2 +
-    (features["unique_countries"] > 2).astype(int) * 0.25 +
-    (features["unapproved_changes"] > 0).astype(int) * 0.25
-).round(4)
-
-features["privilege_change_trend"] = (
-    features["privilege_escalations"] - features["privilege_changes_count"] * 0.5
-).round(4)
-
-features["risk_trend"] = (
-    features["behaviour_deviation_score"] * 0.5 + features["privilege_change_trend"].clip(lower=0) * 0.1
-).round(4)
+# Derived signals (shared with the counterfactual engine, see src/common.py)
+features = add_derived_features(features)
 
 identity_features_df = features.copy()
 identity_features_df.to_csv("data/processed/identity_features.csv", index=False)
-print(f"✅ identity_features.csv -> {len(identity_features_df)} rows, {len(identity_features_df.columns)} columns")
+print(f"[OK] identity_features.csv -> {len(identity_features_df)} rows, {len(identity_features_df.columns)} columns")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 8. TRAIN/TEST SPLIT (80/20, stratified by risk_level)
 # ═══════════════════════════════════════════════════════════════════════════
-
-from sklearn.model_selection import train_test_split
 
 train_df, test_df = train_test_split(
     identity_features_df,
@@ -468,14 +463,14 @@ train_df, test_df = train_test_split(
 
 train_df.to_csv("data/processed/train_features.csv", index=False)
 test_df.to_csv("data/processed/test_features.csv", index=False)
-print(f"✅ train_features.csv    -> {len(train_df)} rows")
-print(f"✅ test_features.csv     -> {len(test_df)} rows")
+print(f"[OK] train_features.csv    -> {len(train_df)} rows")
+print(f"[OK] test_features.csv     -> {len(test_df)} rows")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # README SUMMARY
 # ═══════════════════════════════════════════════════════════════════════════
 
-summary = f"""IAM Dataset Summary — MCA Capstone
+summary = f"""X-UBA IAM Dataset Summary - MCA Major Project
 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 RAW TABLES (data/raw/)
@@ -497,13 +492,11 @@ RISK DISTRIBUTION (identities.csv)
 THREAT TYPE DISTRIBUTION
 {identities_df['threat_type'].value_counts().to_string()}
 
-Random seed: 42 (fully reproducible)
+Random seed: {SEED} (fully reproducible)
 """
 
-with open("data/processed/README_data_summary.txt", "w") as f:
-    f.write(summary)
+write_text("data/processed/README_data_summary.txt", summary)
 
-print("\n" + "=" * 70)
-print("✅ DATASET GENERATION COMPLETE")
-print("=" * 70)
+print()
+banner("[OK] PHASE 0 COMPLETE - DATASET GENERATED")
 print(summary)

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}X-UBA{% endblock %} | X-UBA</title>
+<style>
+:root {
+  --bg: #f5f6f8; --panel: #ffffff; --ink: #1c2230; --muted: #5d6679; --line: #e2e5ec;
+  --accent: #2a5bd7; --accent-soft: #e7edfb;
+  --crit: #c62828; --crit-soft: #fdeaea; --high: #d9730d; --high-soft: #fdf0e3;
+  --med: #b58a00; --med-soft: #fbf5dc; --low: #2e7d32; --low-soft: #e6f3e7;
+  --bar: #2a5bd7;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11141a; --panel: #1a1e27; --ink: #e6e9ef; --muted: #99a1b3; --line: #2b3140;
+    --accent: #7ea2ff; --accent-soft: #1f2a44;
+    --crit: #ff6b6b; --crit-soft: #3a1c1f; --high: #ffa24c; --high-soft: #3a2a1a;
+    --med: #e6c34d; --med-soft: #35301a; --low: #6fcf75; --low-soft: #1a3320;
+    --bar: #7ea2ff;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+header { background: var(--panel); border-bottom: 1px solid var(--line); }
+.bar { max-width: 1200px; margin: 0 auto; padding: 12px 16px; display: flex; gap: 24px;
+  align-items: center; flex-wrap: wrap; }
+.brand { font-weight: 700; font-size: 17px; color: var(--ink); }
+.brand small { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 6px; }
+nav a { margin-right: 18px; color: var(--muted); font-weight: 500; }
+nav a.on { color: var(--accent); }
+main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 48px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+.sub { color: var(--muted); margin: 0 0 20px; }
+.grid { display: grid; gap: 16px; }
+.g2 { grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+.g3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.kpis { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-bottom: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px;
+  min-width: 0; }
+.kpi .v { font-size: 26px; font-weight: 700; }
+.kpi .l { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; white-space: nowrap; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; font-weight: 600; }
+.b-crit { background: var(--crit-soft); color: var(--crit); }
+.b-high { background: var(--high-soft); color: var(--high); }
+.b-med { background: var(--med-soft); color: var(--med); }
+.b-low { background: var(--low-soft); color: var(--low); }
+.b-none { background: var(--accent-soft); color: var(--accent); }
+.hbar { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.hbar .lab { width: 190px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar .track { flex: 1; background: var(--line); border-radius: 4px; height: 12px; }
+.hbar .fill { background: var(--bar); height: 12px; border-radius: 4px; }
+.hbar .val { width: 70px; text-align: right; font-variant-numeric: tabular-nums; }
+.stack { display: flex; height: 22px; border-radius: 6px; overflow: hidden; margin: 8px 0; }
+.stack div { height: 100%; }
+.legend span { margin-right: 14px; font-size: 12px; color: var(--muted); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; }
+form.filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+input, select, button { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); }
+button { background: var(--accent); color: #fff; border-color: var(--accent); cursor: pointer; }
+.pager { margin-top: 12px; color: var(--muted); }
+.pager a { margin: 0 6px; }
+.lede { font-size: 15px; }
+.kv { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; }
+.kv div:nth-child(odd) { color: var(--muted); }
+.chain { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; }
+.chain .step { flex: 1; min-width: 130px; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+.chain .p { font-size: 22px; font-weight: 700; }
+.note { color: var(--muted); font-size: 12px; }
+.pos { color: var(--crit); } .neg { color: var(--low); }
+pre { white-space: pre-wrap; font-size: 12px; }
+svg text { fill: var(--muted); font-size: 10px; }
+@media (max-width: 600px) { .hbar .lab { width: 110px; } .kv { grid-template-columns: 110px 1fr; } }
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <a class="brand" href="/">X-UBA<small>MCA Major Project</small></a>
+  <nav>
+    <a href="/" class="{{ 'on' if request.path == '/' }}">Overview</a>
+    <a href="/identities" class="{{ 'on' if request.path.startswith('/identit') }}">Identities</a>
+    <a href="/research" class="{{ 'on' if request.path == '/research' }}">Research results</a>
+  </nav>
+</div></header>
+<main>{% block body %}{% endblock %}</main>
+</body>
+</html>

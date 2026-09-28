@@ -1,5 +1,8 @@
-﻿venv/
+venv/
+.venv/
 data/raw/
 data/processed/
 models/
+reports/
 __pycache__/
+*.pyc

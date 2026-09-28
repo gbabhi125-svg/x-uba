@@ -1,150 +1,67 @@
-# ═══════════════════════════════════════════════════════════════════════
-#   X-UBA — ENVIRONMENT SETUP (PowerShell / VS Code Terminal)
-#   Run this from the project ROOT folder (X-UBA\).
-# ═══════════════════════════════════════════════════════════════════════
+# =======================================================================
+#   X-UBA - MCA MAJOR PROJECT - ENVIRONMENT SETUP (PowerShell / VS Code)
+#   Run from the project ROOT folder:   .\setup_environment.ps1
+#   If scripts are blocked:  powershell -ExecutionPolicy Bypass -File .\setup_environment.ps1
+# =======================================================================
 
 $ErrorActionPreference = "Stop"
+Set-Location -Path $PSScriptRoot
 
-Write-Host ""
-Write-Host "============================================================"
-Write-Host "  X-UBA - Environment Setup"
-Write-Host "============================================================"
-Write-Host ""
-
-# ── Step 1: Check Python ────────────────────────────────────────────────
-try {
-    $pyver = python --version 2>&1
-    Write-Host "[OK] Python found: $pyver"
-} catch {
-    Write-Host "[X] Python not found. Install Python 3.10/3.11 from python.org"
-    Write-Host "    and check 'Add python.exe to PATH' during install."
+function Fail($msg) {
+    Write-Host "[X] $msg" -ForegroundColor Red
     exit 1
 }
 
-# ── Step 2: Confirm we're in the right folder ───────────────────────────
-if (-not (Test-Path "requirements.txt")) {
-    Write-Host "[X] requirements.txt not found. Run this script from the X-UBA project root."
-    exit 1
+Write-Host ""
+Write-Host "============================================================"
+Write-Host "  X-UBA - MCA Major Project - Environment Setup"
+Write-Host "============================================================"
+Write-Host ""
+
+# -- Step 1: Python 3.10+ ---------------------------------------------------
+if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+    Fail "Python not found. Install Python 3.10 - 3.13 from python.org and tick 'Add python.exe to PATH'."
 }
-if (-not (Test-Path "src\data_generation\generate_dataset.py")) {
-    Write-Host "[X] src\data_generation\generate_dataset.py not found. Check your folder structure."
-    exit 1
+python -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)"
+if ($LASTEXITCODE -ne 0) { Fail "Python 3.10 or newer is required (found: $(python --version 2>&1))." }
+Write-Host "[OK] $(python --version 2>&1)"
+
+# -- Step 2: project structure --------------------------------------------
+foreach ($f in @("requirements.txt", "run_pipeline.py", "src\data_generation\generate_dataset.py")) {
+    if (-not (Test-Path $f)) { Fail "$f not found. Run this script from the X-UBA project root." }
 }
 Write-Host "[OK] Project structure verified."
-Write-Host ""
 
-# ── Step 3: Create virtual environment ──────────────────────────────────
-if (Test-Path "venv") {
+# -- Step 3: virtual environment ------------------------------------------
+if (Test-Path "venv\Scripts\python.exe") {
     Write-Host "[OK] Virtual environment already exists - reusing it."
 } else {
     Write-Host "Creating virtual environment..."
     python -m venv venv
+    if ($LASTEXITCODE -ne 0) { Fail "Could not create the virtual environment." }
     Write-Host "[OK] Virtual environment created."
 }
-Write-Host ""
+$py = "venv\Scripts\python.exe"
 
-# ── Step 4: Install dependencies inside venv ────────────────────────────
+# -- Step 4: dependencies --------------------------------------------------
 Write-Host "Installing dependencies (isolated inside venv\)..."
-& "venv\Scripts\python.exe" -m pip install --upgrade pip -q
-& "venv\Scripts\python.exe" -m pip install -r requirements.txt
+& $py -m pip install --upgrade pip -q
+& $py -m pip install -r requirements.txt
+if ($LASTEXITCODE -ne 0) { Fail "Dependency installation failed - see the error above." }
 Write-Host "[OK] Dependencies installed."
 Write-Host ""
 
-# ── Step 5: Run the full pipeline (Phases 0-7, in dependency order) ──────
-Write-Host "============================================================"
-Write-Host "  PHASE 0: Generating heterogeneous telemetry dataset"
-Write-Host "============================================================"
-& "venv\Scripts\python.exe" "src\data_generation\generate_dataset.py"
-Write-Host ""
+# -- Step 5: full pipeline (stops on the first failing module) -------------
+& $py run_pipeline.py
+if ($LASTEXITCODE -ne 0) { Fail "The pipeline stopped with an error - see the message above." }
 
-Write-Host "============================================================"
-Write-Host "  PHASE 1: Training XGBoost models + SHAP explainability"
-Write-Host "============================================================"
-& "venv\Scripts\python.exe" "src\modeling\train_models.py"
 Write-Host ""
-
 Write-Host "============================================================"
-Write-Host "  PHASE 2: Isolation Forest anomaly detection"
-Write-Host "============================================================"
-& "venv\Scripts\python.exe" "src\anomaly_detection\train_isolation_forest.py"
-Write-Host ""
-
-Write-Host "============================================================"
-Write-Host "  PHASE 3: K-Means behavioral clustering"
-Write-Host "============================================================"
-& "venv\Scripts\python.exe" "src\clustering\train_kmeans_clustering.py"
-Write-Host ""
-
-Write-Host "============================================================"
-Write-Host "  PHASE 4: Temporal risk trajectory"
-Write-Host "============================================================"
-& "venv\Scripts\python.exe" "src\temporal_analysis\temporal_risk_trajectory.py"
-Write-Host ""
-
-Write-Host "============================================================"
-Write-Host "  PHASE 5: Privilege graph and blast radius"
-Write-Host "============================================================"
-& "venv\Scripts\python.exe" "src\graph_analysis\build_privilege_graph.py"
-Write-Host ""
-
-Write-Host "============================================================"
-Write-Host "  PHASE 6: Counterfactual risk-reduction engine"
-Write-Host "============================================================"
-& "venv\Scripts\python.exe" "src\simulator\counterfactual_engine.py"
-Write-Host ""
-
-Write-Host "============================================================"
-Write-Host "  PHASE 7: AI Identity Attack Simulator"
-Write-Host "============================================================"
-& "venv\Scripts\python.exe" "src\simulator\attack_simulator.py"
-Write-Host ""
-
-Write-Host "============================================================"
-Write-Host "  PHASE 8a: Separation of Duties violations"
-Write-Host "============================================================"
-& "venv\Scripts\python.exe" "src\compliance\sod_violations.py"
-Write-Host ""
-
-Write-Host "============================================================"
-Write-Host "  PHASE 8b: Compliance gap analysis (NIST/GDPR)"
-Write-Host "============================================================"
-& "venv\Scripts\python.exe" "src\compliance\compliance_gap_analysis.py"
-Write-Host ""
-
-Write-Host "============================================================"
-Write-Host "  PHASE 8c: Organizational anomaly detection"
-Write-Host "============================================================"
-& "venv\Scripts\python.exe" "src\organizational_analysis\org_anomaly_detection.py"
-Write-Host ""
-
-Write-Host "============================================================"
-Write-Host "  GAP 1: Multi-Signal Risk Fusion"
-Write-Host "============================================================"
-& "venv\Scripts\python.exe" "src\risk_fusion\risk_fusion_engine.py"
-Write-Host ""
-
-Write-Host "============================================================"
-Write-Host "  GAP 2: SHAP Explanation Fidelity Quantification"
-Write-Host "============================================================"
-& "venv\Scripts\python.exe" "src\explainability\explanation_fidelity.py"
-Write-Host ""
-
-Write-Host "============================================================"
-Write-Host "  GAP 3: Graph-Structural Peer-Group Anomaly Detection"
-Write-Host "============================================================"
-& "venv\Scripts\python.exe" "src\graph_analysis\graph_structural_anomaly.py"
-Write-Host ""
-
-Write-Host "============================================================"
-Write-Host "  [OK] SETUP COMPLETE - ALL 14 MODULES RAN SUCCESSFULLY"
+Write-Host "  [OK] SETUP COMPLETE - ALL 14 MODULES RAN SUCCESSFULLY" -ForegroundColor Green
 Write-Host "============================================================"
 Write-Host ""
-Write-Host "  data\raw\        - 6 heterogeneous telemetry tables"
-Write-Host "  data\processed\  - engineered features + train/test split"
-Write-Host "  models\          - XGBoost, Isolation Forest, K-Means, SHAP, graph"
-Write-Host "  reports\         - metrics + summaries for every phase"
-Write-Host ""
-Write-Host "  To run any single script later:"
-Write-Host "    venv\Scripts\Activate.ps1"
-Write-Host "    python src\simulator\attack_simulator.py"
+Write-Host "  Dashboard:   venv\Scripts\python.exe src\dashboard\app.py"
+Write-Host "               then open http://127.0.0.1:5000"
+Write-Host "  One module:  venv\Scripts\python.exe run_pipeline.py --only 8"
+Write-Host "  One report:  venv\Scripts\python.exe src\simulator\attack_simulator.py --identity U00042"
 Write-Host ""
