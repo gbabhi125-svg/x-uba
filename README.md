@@ -1,261 +1,196 @@
 # X-UBA
 ### Explainable User and Entity Behavior Analytics Using Heterogeneous Security Telemetry
 
-MCA Final Year Major Project
+**MCA Major Project**
 
 ---
 
-## What This Is
+## What this is
 
-X-UBA is an identity-risk analytics system that goes beyond simple anomaly
-flagging. It integrates heterogeneous IAM telemetry (authentication logs,
-privilege-change logs, resource-access logs, and identity metadata) into a
-unified risk-scoring pipeline that is:
+X-UBA is an identity-risk analytics system that goes beyond flagging anomalies.
+It fuses heterogeneous IAM telemetry (authentication, privilege-change and
+resource-access logs plus identity metadata) into one pipeline that, for every
+identity, answers:
 
-- **Multi-dimensional** — fuses behavioral, temporal, and privilege signals
-- **Explainable** — every risk score is decomposed via SHAP into contributing factors
-- **Impact-aware** — models what an attacker could reach if an identity is compromised (blast radius)
-- **Actionable** — simulates "what-if" security actions and ranks them by predicted risk reduction
+| Question | Module |
+|---|---|
+| **WHY** is it risky? | XGBoost risk models + SHAP explanations |
+| **WHO** does it behave like? | K-Means behavioural peer groups |
+| **WHEN** is it getting worse? | Temporal risk trajectory |
+| **WHAT** could an attacker do? | Kill-chain attack simulator |
+| **IMPACT** — how far could it spread? | NetworkX privilege graph + blast radius |
+| **ACTION** — what should we do? | Counterfactual "what-if" engine |
 
-## Project Structure
+plus separation-of-duties checks, NIST SP 800-53 / GDPR Art. 32 compliance
+gaps, department-level anomalies, three research-gap experiments, and a web
+dashboard over all of it.
 
-```
-X-UBA/
-├── README.md
-├── requirements.txt
-├── setup_environment.ps1          # one-command environment setup (Windows)
-├── data/
-│   ├── raw/                       # 6 heterogeneous telemetry tables
-│   │   ├── identities.csv
-│   │   ├── login_events.csv
-│   │   ├── privilege_changes.csv
-│   │   ├── resource_access.csv
-│   │   ├── resources.csv
-│   │   └── systems.csv
-│   └── processed/                 # engineered features + train/test split
-│       ├── identity_features.csv
-│       ├── train_features.csv
-│       ├── test_features.csv
-│       └── README_data_summary.txt
-├── src/
-│   ├── data_generation/
-│   │   └── generate_dataset.py    # Phase 0: synthetic telemetry generator
-│   ├── modeling/
-│   │   └── train_models.py        # Phase 1: XGBoost + SHAP training
-│   ├── anomaly_detection/
-│   │   └── train_isolation_forest.py  # Phase 2: unsupervised anomaly detection
-│   ├── explainability/            # SHAP helpers currently live in modeling/
-│   ├── graph_analysis/            # Phase 5: NetworkX privilege graph + blast radius (upcoming)
-│   ├── simulator/                 # Phase 6-7: counterfactual + attack simulator (upcoming)
-│   └── dashboard/                 # Phase 8: Flask web dashboard (upcoming)
-│       └── templates/
-├── models/                        # trained model artifacts (.joblib)
-├── reports/                       # metrics, SHAP importances, figures
-│   └── figures/
-├── notebooks/                     # exploratory analysis (optional)
-└── docs/                          # literature review, architecture diagrams, final report
-```
+## Quick start (Windows, VS Code)
 
-## Architecture (Planned Full Pipeline)
-
-```
-Heterogeneous Telemetry (6 tables)
-            |
-   Feature Engineering
-            |
-   ┌────────┼────────┐
-   |        |         |
-XGBoost  Isolation  K-Means
-(risk)    Forest    (behavior
-            |        clusters)
-   └────────┼────────┘
-            |
-    Temporal Risk Trajectory
-            |
-        Risk Fusion
-            |
-   ┌────────┴────────┐
-   |                  |
-SHAP              Privilege Graph
-Explainability    (NetworkX)
-   |                  |
-"WHY risky?"    Attack Path + Blast Radius
-                       |
-              ┌────────┴────────┐
-              |                 |
-        Counterfactual     ATTACK SIMULATOR
-        "what if?"          "what could happen?"
-              └────────┬────────┘
-                        |
-              Security Dashboard (Flask)
-```
-
-## Current Status
-
-| Phase | Module | Status |
-|---|---|---|
-| 0 | Synthetic heterogeneous telemetry generation (10,000 identities) | ✅ Done |
-| 1 | XGBoost risk classification (is_anomaly, risk_level, threat_type) | ✅ Done |
-| 1b | SHAP explainability | ✅ Done |
-| 2 | Isolation Forest anomaly detection (unsupervised, compared vs XGBoost) | ✅ Done |
-| 3 | K-Means behavioral clustering (4 named clusters) | ✅ Done |
-| 4 | Temporal risk trajectory (early-warning detection) | ✅ Done |
-| 5 | NetworkX privilege graph + risk-weighted blast radius | ✅ Done |
-| 6 | Counterfactual risk-reduction engine | ✅ Done |
-| 7 | AI Identity Attack Simulator (flagship feature) | ✅ Done |
-| 8a | Separation of Duties (SOD) violation detection | ✅ Done |
-| 8b | Compliance gap analysis (NIST AC-2 / GDPR Article 32) | ✅ Done |
-| 8c | Organizational (department-level) anomaly detection | ✅ Done |
-| 9a | **Multi-Signal Risk Fusion** (research gap closure) | ✅ Done |
-| 9b | **SHAP Explanation Fidelity Quantification** (research gap closure) | ✅ Done |
-| 9c | **Graph-Structural Peer-Group Anomaly Detection** (research gap closure) | ✅ Done |
-| 10 | Full Flask dashboard (UI integration of all modules above) | ⏳ Next |
-| 11 | Final report + literature comparison | ⏳ Planned |
-
-## Research Gap Closure (Literature-Grounded Additions)
-
-Three gaps identified from actual 2025-2026 literature (not assumed):
-
-**Source:** Tenali & Potnuri, "A Comprehensive Review of Recent Challenges
-and Emerging Trends in Malicious Insider Threat Detection Using Machine
-Learning-Based Methods," Springer LNNS vol. 2019, ICICC 2026 — names
-**multimodal fusion**, **graph-based modeling**, and **explainability
-benchmarking through metrics of explanation fidelity** as underexploited
-emerging trends. Corroborated by multiple 2025-2026 GNN-for-IAM papers
-(e.g. arXiv:2512.10280) explicitly criticizing systems that score
-identities "in isolation, without modeling relational dependencies
-among entities."
-
-### Gap 1: Multi-Signal Risk Fusion
-X-UBA's own architecture diagram always showed a "Risk Fusion" stage
-combining XGBoost + Isolation Forest + Temporal + Graph signals — this
-was never actually implemented until now. A Logistic Regression
-meta-model stacks all 4 signals into one calibrated score.
-**Result: Fusion F1=0.882 vs best individual signal (XGBoost alone)
-F1=0.862 — a genuine, measured +2.0 point improvement**, not asserted.
-Temporal trend is nearly uncorrelated with the other 3 signals (r<0.03),
-confirming it carries genuinely complementary information despite being
-the weakest standalone predictor (F1=0.35) — exactly the diversity that
-makes ensemble fusion work.
-
-### Gap 2: SHAP Explanation Fidelity Quantification
-Most UEBA/insider-threat systems show SHAP explanations but never verify
-they're faithful to the model's real reasoning. Implemented a
-deletion-based fidelity test (comparable to the ERASER benchmark's
-"comprehensiveness" metric): remove the top-5 SHAP-ranked features vs.
-5 random features, measure the drop in predicted probability.
-**Result: top-5 SHAP features cause a 74x larger probability drop than
-random features (0.393 vs 0.007), with 83.2% of identities showing high
-fidelity (ratio ≥1.5x)** — a genuine, quantified validation that X-UBA's
-explanations are measurably faithful, not just plausible-looking.
-
-### Gap 3: Graph-Structural Peer-Group Anomaly Detection
-Phase 5's privilege graph was previously used only for blast-radius
-*impact*, never for *detection*. Built an identity-identity graph from
-shared critical-resource access, ran Louvain community detection, and
-flagged identities whose risk deviates sharply from their structural
-peer group. **Honest result: on this synthetic dataset, 0 of 154
-structural outliers were "novel" (all were already flagged CRITICAL by
-Phase 1)** — because the data generator's risk-weighted event sampling
-correlates behavioral risk with critical-resource exposure almost
-deterministically. This is reported transparently as a genuine
-limitation of validating relational methods on synthetic data, not
-hidden or forced into a false positive result — and is itself a
-legitimate, defensible methodological finding for the final report.
-
-## Setup
-
-See `setup_environment.ps1` for a one-command environment setup (Windows,
-PowerShell), or run manually, in this exact order (later modules depend on
-earlier ones' outputs):
+Requires Python **3.10 – 3.13** (tick *Add python.exe to PATH* when installing).
 
 ```powershell
 python -m venv venv
 venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 
-python src\data_generation\generate_dataset.py
-python src\modeling\train_models.py
-python src\anomaly_detection\train_isolation_forest.py
-python src\clustering\train_kmeans_clustering.py
-python src\temporal_analysis\temporal_risk_trajectory.py
-python src\graph_analysis\build_privilege_graph.py
-python src\simulator\counterfactual_engine.py
-python src\simulator\attack_simulator.py
-python src\compliance\sod_violations.py
-python src\compliance\compliance_gap_analysis.py
-python src\organizational_analysis\org_anomaly_detection.py
-python src\risk_fusion\risk_fusion_engine.py
-python src\explainability\explanation_fidelity.py
-python src\graph_analysis\graph_structural_anomaly.py
+python run_pipeline.py            # all 14 modules, ~1.5 minutes
+python src\dashboard\app.py       # then open http://127.0.0.1:5000
 ```
 
-## Current Model Performance (Phase 1 + Phase 2)
+Or double-click `SETUP_FRESH.bat` (or run `.\setup_environment.ps1`), which does
+the environment + pipeline in one go. On Linux/macOS use `source venv/bin/activate`.
 
-| Model | Type | Accuracy | F1 |
-|---|---|---|---|
-| is_anomaly | XGBoost (supervised) | 94.1% | 92.2% (macro) |
-| is_anomaly | Isolation Forest (unsupervised) | 84.4% | 69.2% |
-| risk_level (4-class) | XGBoost (supervised) | 84.9% | 83.2% (macro) |
-| threat_type (6-class) | XGBoost (supervised) | 92.9% | 66.0%* (macro) |
+If PowerShell blocks `Activate.ps1`: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
-The Isolation Forest vs XGBoost gap (69.2% vs 92.2% F1 on the *identical*
-feature set) is itself a reportable finding: it quantifies how much
-labeled training data improves detection, while the unsupervised model
-still provides a label-free safety net for novel anomaly types the
-supervised model was never trained on.
+Other useful commands:
 
-\* Macro-F1 is lower than accuracy for `threat_type` because rare attack
-classes (BRUTE_FORCE, DATA_EXFILTRATION, INSIDER_THREAT) have limited
-support in the training data — a known and documented class-imbalance
-limitation, addressed as future work via SMOTE/class-weighting.
+```powershell
+python run_pipeline.py --list                  # list the 14 steps
+python run_pipeline.py --only 8                # re-run one step
+python run_pipeline.py --from 5                # resume from a step
+python src\simulator\attack_simulator.py --identity U05473   # one identity's full report
+```
 
-## Phase 3-7 Results Summary
+`run_pipeline.py` stops at the first failing module and exits non-zero, so a
+failure can never be reported as success.
 
-**Phase 3 (Clustering):** 4 named behavioral clusters, e.g. "Stale Admin +
-MFA-Gap + High-Risk" (1,408 identities, 74% CRITICAL/HIGH) vs "Low-Risk /
-Baseline" (4,389 identities, 84% LOW risk).
+## Reproducibility
 
-**Phase 4 (Temporal):** 1,966 identities flagged with an EARLY_WARNING —
-risk rising sharply even when current absolute risk isn't yet CRITICAL.
+- Fixed random seed (42) in every module.
+- `requirements.txt` pins exact library versions.
+- Verified: the complete pipeline produces **byte-identical outputs (all 59 data
+  and report files) on Python 3.10, 3.11, 3.12 and 3.13**, and across repeated runs.
 
-**Phase 5 (Blast Radius):** Validated — average blast radius score rises
-monotonically with actual risk level (32.5 → 43.2 → 58.2 → 70.0), with a
-0.693 correlation to the ground-truth threat score.
+## Project structure
 
-**Phase 6 (Counterfactual):** "Reduce System Footprint" is the single most
-effective intervention (average -9.22 points), independently matching
-Phase 1's top SHAP-ranked features — convergent validation between
-explainability and actionability.
+```
+X-UBA/
+├── run_pipeline.py                 # one command for all 14 modules
+├── requirements.txt                # pinned versions
+├── SETUP_FRESH.bat / setup_environment.ps1
+├── src/
+│   ├── common.py                   # shared loading, encoding, risk index
+│   ├── data_generation/generate_dataset.py          Phase 0
+│   ├── modeling/train_models.py                     Phase 1
+│   ├── anomaly_detection/train_isolation_forest.py  Phase 2
+│   ├── clustering/train_kmeans_clustering.py        Phase 3
+│   ├── temporal_analysis/temporal_risk_trajectory.py Phase 4
+│   ├── graph_analysis/build_privilege_graph.py      Phase 5
+│   ├── simulator/counterfactual_engine.py           Phase 6
+│   ├── simulator/attack_simulator.py                Phase 7
+│   ├── compliance/sod_violations.py                 Phase 8a
+│   ├── compliance/compliance_gap_analysis.py        Phase 8b
+│   ├── organizational_analysis/org_anomaly_detection.py Phase 8c
+│   ├── risk_fusion/risk_fusion_engine.py            Gap 1
+│   ├── explainability/explanation_fidelity.py       Gap 2
+│   ├── graph_analysis/graph_structural_anomaly.py   Gap 3
+│   └── dashboard/app.py + templates/                Phase 9 (Flask)
+├── data/raw, data/processed        # generated (not committed)
+├── models/                         # generated
+└── reports/                        # generated: *_summary.txt, *_metrics.json, CSVs
+```
 
-**Phase 7 (Attack Simulator):** Fully integrates Phases 1, 3, 4, 5, 6 into
-one per-identity WHY → WHAT → IMPACT → ACTION report.
+## Dataset
 
-**Phase 8a (SOD Violations):** 1,057 identities (10.6%) flagged across 5
-rule types; most common is "Admin Without MFA" (587 identities).
+Synthetic heterogeneous telemetry for **10,000 identities**, generated
+deterministically (seed 42):
 
-**Phase 8b (Compliance Gaps):** 78% of identities have at least one NIST/GDPR
-gap - reflecting the identity-sprawl problem this project targets, not a
-detection error. Average compliance score: 71.3/100.
+| Table | Rows |
+|---|---|
+| systems | 15 (AD, Azure AD, AWS IAM, Okta, PROD_DB, Data Lake, ...) |
+| resources | 428 |
+| identities | 10,000 (risk: LOW 4,312 / MEDIUM 2,664 / HIGH 1,711 / CRITICAL 1,313) |
+| login_events | 300,000 |
+| privilege_changes | 30,000 |
+| resource_access | 150,000 |
 
-**Phase 8c (Org Anomalies):** Departments show only minor risk variation
-(26.8-28.6 avg) because `department` is generated independently of the
-actual risk-driving factors (privilege, admin status, inactivity) -
-this is a deliberate validation that the risk model doesn't leak
-department as a spurious signal (department is intentionally excluded
-from Phase 1's feature set). Real deployments with genuine department-
-correlated access patterns (e.g. Finance month-end spikes) would show
-sharper organizational anomalies; injecting such correlated patterns
-into the synthetic generator is noted as future work.
+Aggregated into 30 identity features; stratified 80/20 split (8,000 train /
+2,000 test).
 
-Full metrics for every phase: see individual `reports/phaseN_*_summary.txt` files.
+## Results (held-out test set unless stated)
 
-## Novelty Statement
+### Phase 1–2: detection
 
-Existing identity/UEBA research largely stops at *detecting* anomalous or
-risky identities. X-UBA extends this into **impact assessment and proactive
-mitigation**: for any identity, the system explains *why* it is risky (SHAP),
-estimates *what* could happen if it were compromised (graph-based blast
-radius), and simulates *which* security action produces the greatest
-predicted risk reduction (counterfactual analysis) — a
-**Detect → Explain → Simulate → Mitigate** workflow rather than detection alone.
+| Model | Accuracy | F1 |
+|---|---|---|
+| XGBoost `is_anomaly` | 94.4% | 92.5% (macro), 88.8% (anomaly class) |
+| XGBoost `risk_level` (4-class) | 85.4% | 83.9% (macro) |
+| XGBoost `threat_type` (6-class) | 92.6% | 63.8% (macro)* |
+| Isolation Forest (unsupervised) | 84.4% | 69.2% (anomaly class) |
+
+Like-for-like (anomaly class), labelled data lifts F1 from 0.692 to 0.888.
+\* Rare threat classes (INSIDER_THREAT: 30 test cases) have low recall; class
+imbalance is a known limitation.
+
+Downstream modules use **5-fold out-of-fold** scores, so no identity is scored
+by a model that saw its label.
+
+### Phases 3–8
+
+| Phase | Headline result |
+|---|---|
+| 3 K-Means | 4 unlabelled clusters; true-anomaly rate ranges from 94.9% ("Stale + Admin-Heavy + MFA-Gap ...", 1,313 ids) to 0.1% ("Low-Activity + Low-Risk", 3,959 ids). Silhouette 0.14 (overlapping groups). |
+| 4 Temporal | 574 early warnings. Activity **level** AUC 0.963; activity **trend** AUC 0.495 (see limitations). |
+| 5 Blast radius | Graph of 10,443 nodes / 163,798 edges. Mean blast radius rises monotonically LOW 20.5 → MEDIUM 30.3 → HIGH 50.2 → CRITICAL 64.4; Pearson r = 0.578 with ground truth. |
+| 6 Counterfactual | Most effective action: *Reduce System Footprint* (−9.1 points on average over 2,983 HIGH/CRITICAL identities). Action effectiveness agrees with SHAP feature ranking (Spearman 0.975). |
+| 7 Attack simulator | Label-free kill-chain ranking: AUC 0.867; the top-100 simulated targets are 100% true anomalies. |
+| 8a SOD | 1,936 identities (19.4%) violate at least one of 6 rules (e.g. Admin Without MFA: 587). Flagged identities are 60.3% anomalous vs 17.0% otherwise. |
+| 8b Compliance | 59.1% of identities have ≥1 NIST/GDPR gap; average score 83.9/100 (LOW 95.6 → CRITICAL 62.3). |
+| 8c Organisation | Department does not predict anomaly (chi-square p = 0.83). Within-department peer outliers: 783, of which 86.5% are true anomalies (base rate 25.4%). |
+
+### Research gaps
+
+Source motivating the three gaps: Tenali & Potnuri, *A Comprehensive Review of
+Recent Challenges and Emerging Trends in Malicious Insider Threat Detection
+Using Machine Learning-Based Methods*, Springer LNNS vol. 2019, ICICC 2026
+(multimodal fusion, graph-based modelling and explanation-fidelity metrics as
+under-exploited trends).
+
+**Gap 1 — Multi-signal risk fusion.** Logistic-regression meta-model over
+XGBoost, Isolation Forest, temporal trend and blast radius; thresholds tuned on
+train, evaluated on test.
+
+| Signal | F1 | ROC-AUC |
+|---|---|---|
+| XGBoost | 0.882 | 0.987 |
+| Isolation Forest | 0.691 | 0.895 |
+| Temporal trend | 0.406 | 0.505 |
+| Blast radius | 0.634 | 0.818 |
+| **Fusion** | **0.883** | 0.980 |
+
+F1 gain +0.0007, 95% bootstrap CI [−0.0067, +0.0081]: **not significant**.
+XGBoost already captures what the other signals carry on this dataset.
+
+**Gap 2 — SHAP explanation fidelity.** Deletion test on 2,000 test identities:
+removing the top-5 SHAP features lowers the predicted-class probability by
+0.238 vs 0.033 for 5 random features (**7.3x**). 60.5% of explanations are
+high-fidelity (≥1.5x random) — **100% for predicted anomalies**, 47% for
+predicted-normal identities (the model is so confident about them that
+removing any five features barely matters). Sufficiency: the top-5 features
+alone retain 0.959 of the prediction vs 0.774 for random five.
+
+**Gap 3 — Graph-structural peer groups.** Cosine 10-NN graph over sensitive
+resource access (9,771 identities, 81,355 edges), 51 Louvain communities
+(modularity 0.557). 248 identities sit ≥2σ above their structural peers — all
+true anomalies, but **0 novel** (all already flagged by Phase 1). Adding the
+neighbours' risk does not raise test AUC (0.985 → 0.985).
+
+## Limitations (reported, not hidden)
+
+1. **Synthetic data.** Results show the pipeline works and is internally
+   consistent; they are not evidence about real enterprise IAM data.
+2. **Activity volume leaks risk.** The generator gives riskier identities more
+   events, so `login_count` / `access_count` are the top SHAP features. A real
+   deployment should normalise activity by role.
+3. **No temporal escalation in the data.** Events are spread uniformly over the
+   year, so trend detection cannot be demonstrated (AUC 0.495) even though the
+   module works.
+4. **Resources are accessed at random.** Graph peer groups therefore carry no
+   extra risk signal (Gap 3), and fusion gains are not significant (Gap 1).
+5. Counterfactual reductions are **model** predictions, not observed outcomes.
+6. The compliance mapping is an assessment aid, not a certification.
+
+Future work: inject role-based access patterns and time-escalating attack
+campaigns into the generator, then re-run Gaps 1 and 3; class re-weighting for
+rare threat types.
