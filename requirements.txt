@@ -1,12 +1,14 @@
 # X-UBA - MCA Major Project
-# Exact versions: every machine (Python 3.10 - 3.13, Windows / Linux / macOS)
-# installs the same libraries, so every run reproduces the same numbers.
-numpy==2.2.6
+# Exact versions for Python 3.11 - 3.14 (Windows / Linux / macOS), so every
+# machine installs the same libraries and reproduces the same numbers.
+numpy==2.3.5
 pandas==2.3.3
-scipy==1.15.3
+scipy==1.16.3
 scikit-learn==1.7.2
 xgboost==3.0.5
-shap==0.49.1
+shap==0.51.0
+numba==0.67.0
+llvmlite==0.49.0
 joblib==1.5.2
-networkx==3.4.2
+networkx==3.5
 Flask==3.1.2

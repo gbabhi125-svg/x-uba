@@ -27,7 +27,7 @@ dashboard over all of it.
 
 ## Quick start (Windows, VS Code)
 
-Requires Python **3.10 – 3.13** (tick *Add python.exe to PATH* when installing).
+Requires Python **3.11 – 3.14** (tick *Add python.exe to PATH* when installing).
 
 ```powershell
 python -m venv venv
@@ -60,7 +60,7 @@ failure can never be reported as success.
 - Fixed random seed (42) in every module.
 - `requirements.txt` pins exact library versions.
 - Verified: the complete pipeline produces **byte-identical outputs (all 59 data
-  and report files) on Python 3.10, 3.11, 3.12 and 3.13**, and across repeated runs.
+  and report files) on Python 3.11, 3.12, 3.13 and 3.14**, and across repeated runs.
 
 ## Project structure
 

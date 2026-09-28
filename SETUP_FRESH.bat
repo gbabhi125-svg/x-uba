@@ -17,18 +17,18 @@ echo   X-UBA - MCA MAJOR PROJECT - FRESH SETUP
 echo ============================================================
 echo.
 
-REM -- Step 1: Python 3.10+ -------------------------------------------------
+REM -- Step 1: Python 3.11+ -------------------------------------------------
 python --version >nul 2>&1
 if errorlevel 1 (
     echo [X] Python not found on this machine.
-    echo     Install Python 3.10 - 3.13 from https://www.python.org/downloads/
+    echo     Install Python 3.11 - 3.14 from https://www.python.org/downloads/
     echo     and tick "Add python.exe to PATH" during install, then re-run this file.
     pause
     exit /b 1
 )
-python -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)"
+python -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)"
 if errorlevel 1 (
-    echo [X] Python 3.10 or newer is required. Found:
+    echo [X] Python 3.11 or newer is required. Found:
     python --version
     pause
     exit /b 1

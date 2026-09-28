@@ -18,12 +18,12 @@ Write-Host "  X-UBA - MCA Major Project - Environment Setup"
 Write-Host "============================================================"
 Write-Host ""
 
-# -- Step 1: Python 3.10+ ---------------------------------------------------
+# -- Step 1: Python 3.11+ ---------------------------------------------------
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-    Fail "Python not found. Install Python 3.10 - 3.13 from python.org and tick 'Add python.exe to PATH'."
+    Fail "Python not found. Install Python 3.11 - 3.14 from python.org and tick 'Add python.exe to PATH'."
 }
-python -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)"
-if ($LASTEXITCODE -ne 0) { Fail "Python 3.10 or newer is required (found: $(python --version 2>&1))." }
+python -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)"
+if ($LASTEXITCODE -ne 0) { Fail "Python 3.11 or newer is required (found: $(python --version 2>&1))." }
 Write-Host "[OK] $(python --version 2>&1)"
 
 # -- Step 2: project structure --------------------------------------------

@@ -50,8 +50,8 @@ def main():
             print(f"{i:2d}. {name:42s} {path}")
         return 0
 
-    if sys.version_info < (3, 10):
-        print(f"[X] Python 3.10+ required, found {sys.version.split()[0]}")
+    if sys.version_info < (3, 11):
+        print(f"[X] Python 3.11+ required, found {sys.version.split()[0]}")
         return 1
 
     selected = [args.only] if args.only else list(range(args.start, len(STEPS) + 1))
